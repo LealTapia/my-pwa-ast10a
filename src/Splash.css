@@ -1,0 +1,25 @@
+.splash {
+    position: fixed;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    background: #0E1F53;
+    color: #fff;
+    z-index: 9999
+}
+
+.splash .card {
+    display: grid;
+    gap: .5rem;
+    place-items: center
+}
+
+.splash .logo {
+    font-size: 64px;
+    line-height: 1
+}
+
+.splash .title {
+    font-weight: 600;
+    letter-spacing: .5px
+}
