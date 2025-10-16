@@ -57,13 +57,18 @@ function App() {
 
 const styles: Record<string, React.CSSProperties> = {
   main: {
-    maxWidth: 720,
-    margin: "32px auto",
-    padding: "0 16px",
+    minHeight: "0vh",
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 16,
+    padding: "24px 16px",
     fontFamily:
       'ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Inter, Arial',
+    background: "none ",
   },
-  header: { display: "flex", alignItems: "center", gap: 12, marginBottom: 16 },
+  header: { display: "flex", alignItems: "center", gap: 12 },
   badge: {
     color: "#fff",
     padding: "6px 10px",
@@ -72,11 +77,15 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 700,
   },
   card: {
+    width: "100%",
+    maxWidth: 720,
     background: "#fafafa",
     border: "1px solid #ececec",
     borderRadius: 12,
     padding: 16,
+    boxShadow: "0 4px 14px rgba(0,0,0,.06)",
   },
 };
+
 
 export default App;

@@ -23,7 +23,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     try {
         if (req.method === 'PATCH') {
-            const { title, notes, completed, updated_at } = req.body ?? {};
+            let payload: any = req.body ?? {};
+            if (typeof payload === 'string') {
+                try { payload = JSON.parse(payload); } catch { }
+            }
+            const { title, notes, completed, updated_at } = payload;
+
             if (!updated_at) {
                 return res.status(400).json({ ok: false, error: 'Missing required field: updated_at' });
             }

@@ -1,4 +1,3 @@
-// api/entries.ts
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { sql } from '@vercel/postgres';
 
@@ -24,12 +23,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         FROM entries
         ORDER BY updated_at DESC
         LIMIT 200
-      `;
+        `;
             return res.status(200).json({ ok: true, data: rows });
         }
 
         if (req.method === 'POST') {
-            const { title, notes = '', completed = false, created_at, updated_at } = req.body ?? {};
+            let payload: any = req.body ?? {};
+            if (typeof payload === 'string') {
+                try { payload = JSON.parse(payload); } catch { }
+            }
+
+            const { title, notes = '', completed = false, created_at, updated_at } = payload;
             if (!title || !created_at || !updated_at) {
                 return res.status(400).json({ ok: false, error: 'Missing required fields: title, created_at, updated_at' });
             }
@@ -38,7 +42,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         INSERT INTO entries (title, notes, completed, created_at, updated_at)
         VALUES (${title}, ${notes}, ${completed}, ${created_at}, ${updated_at})
         RETURNING id, title, notes, completed, created_at, updated_at, inserted_at
-      `;
+        `;
             return res.status(201).json({ ok: true, data: rows[0] });
         }
 

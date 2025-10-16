@@ -5,25 +5,27 @@ import { queueCreate, requestBackgroundSync } from "../lib/db";
 type Props = { onSaved: () => void };
 
 export default function InputsForm({ onSaved }: Props) {
-    const [text, setText] = useState("");
+    const [title, setTitle] = useState("");
+    const [notes, setNotes] = useState("");
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
     async function handleSubmit(e: FormEvent) {
         e.preventDefault();
         setError(null);
-        if (!text.trim()) {
-            setError("Escribe una tarea.");
+        const t = title.trim();
+        const n = notes.trim();
+        if (!t) {
+            setError("Escribe un título.");
             return;
         }
         try {
             setSaving(true);
-            const value = text.trim();
-            await queueCreate(value);
-            await requestBackgroundSync('sync-outbox');
-            setText("");
+            await queueCreate({ title: t, notes: n });
+            await requestBackgroundSync("sync-outbox");
+            setTitle("");
+            setNotes("");
             onSaved();
-
         } catch (err: any) {
             setError(err?.message ?? "Error guardando en IndexedDB");
         } finally {
@@ -35,28 +37,39 @@ export default function InputsForm({ onSaved }: Props) {
         <form onSubmit={handleSubmit} style={styles.form}>
             <input
                 type="text"
-                placeholder="Nueva tarea (funciona offline)"
-                value={text}
-                onChange={(e) => setText(e.target.value)}
+                placeholder="Título"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
                 style={styles.input}
+                disabled={saving}
+            />
+            <textarea
+                placeholder="Descripción"
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                style={{ ...styles.input, minHeight: 80, resize: "vertical" }}
                 disabled={saving}
             />
             <button type="submit" style={styles.button} disabled={saving}>
                 {saving ? "Guardando..." : "Guardar"}
             </button>
-            {error && <p style={styles.error}>{error}</p>}
+
+            {/* Espacio reservado para que el error NO empuje el layout */}
+            <div style={{ minHeight: 18, marginTop: 6 }}>
+                {error && <p style={styles.error}>{error}</p>}
+            </div>
         </form>
     );
 }
 
 const styles: Record<string, React.CSSProperties> = {
-    form: { display: "flex", gap: 8, alignItems: "center" },
+    form: { display: "flex", flexDirection: "column", gap: 8, alignItems: "stretch" },
     input: {
-        flex: 1,
         padding: "10px 12px",
         border: "1px solid #ccc",
         borderRadius: 8,
         outline: "none",
+        background: "#fff",
     },
     button: {
         padding: "10px 14px",
@@ -66,5 +79,5 @@ const styles: Record<string, React.CSSProperties> = {
         color: "#fff",
         cursor: "pointer",
     },
-    error: { color: "#b00020", marginTop: 8 },
+    error: { color: "#b00020", margin: 0, fontSize: 13 },
 };

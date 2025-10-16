@@ -1,22 +1,40 @@
+// src/lib/db.ts
+
+// ====== Tipos ======
 export interface Task {
     id?: number;
-    text: string;
+    // Nuevo modelo con titulo + descripcion
+    title: string;
+    notes: string;
     completed: boolean;
-    isSynced: boolean; 
-    createdAt: number; 
-    updatedAt: number; 
+    isSynced: boolean;
+    createdAt: number;
+    updatedAt: number;
+    remoteId?: number;
 }
+
+// Compat: por si quedan registros viejos que tenían "text"
+type LegacyTask = {
+    id?: number;
+    text?: string;
+    completed?: boolean;
+    isSynced?: boolean;
+    createdAt?: number;
+    updatedAt?: number;
+    remoteId?: number;
+};
 
 type OutboxOp = 'create' | 'update' | 'delete';
 
 export interface OutboxItem {
     id?: number;
     op: OutboxOp;
-    taskId?: number;  
-    payload?: Task;    
-    createdAt: number; 
+    taskId?: number;
+    payload?: Task | (Task & { id: number }) | any;
+    createdAt: number;
 }
 
+// ====== IDB config ======
 const DB_NAME = 'my-pwa-ast-db';
 const DB_VERSION = 1;
 
@@ -64,73 +82,7 @@ export const openDB = (): Promise<IDBDatabase> =>
         };
     });
 
-export async function addTask(task: Pick<Task, 'text'>) {
-    const database = await openDB();
-    return txWrap(database, TASKS_STORE, 'readwrite', (store) => {
-        const now = Date.now();
-        const toSave: Task = {
-            ...task,
-            completed: false,
-            isSynced: false,
-            createdAt: now,
-            updatedAt: now,
-        };
-        return promisifyRequest(store.add(toSave));
-    });
-}
-
-export async function getAllTasks(): Promise<Task[]> {
-    const database = await openDB();
-    return txWrap(database, TASKS_STORE, 'readonly', (store) =>
-        promisifyRequest(store.getAll())
-    );
-}
-
-export async function updateTask(task: Task) {
-    if (!task.id) throw new Error('updateTask: falta id');
-    const database = await openDB();
-    task.updatedAt = Date.now();
-    task.isSynced = false;
-    return txWrap(database, TASKS_STORE, 'readwrite', (store) =>
-        promisifyRequest(store.put(task))
-    );
-}
-
-export async function deleteTask(id: number) {
-    const database = await openDB();
-    return txWrap(database, TASKS_STORE, 'readwrite', (store) =>
-        promisifyRequest(store.delete(id))
-    );
-}
-
-export async function enqueueOutbox(item: Omit<OutboxItem, 'id' | 'createdAt'>) {
-    const database = await openDB();
-    const toSave: OutboxItem = { ...item, createdAt: Date.now() };
-    return txWrap(database, OUTBOX_STORE, 'readwrite', (store) =>
-        promisifyRequest(store.add(toSave))
-    );
-}
-
-export async function readOutboxBatch(limit = 20): Promise<OutboxItem[]> {
-    const database = await openDB();
-    return txWrap(database, OUTBOX_STORE, "readonly", async (store) => {
-        const idx = store.index("by_createdAt");
-        const all = await promisifyRequest<OutboxItem[]>(idx.getAll());
-        return all.slice(0, limit);
-    });
-}
-
-
-export async function clearOutboxIds(ids: number[]) {
-    const database = await openDB();
-    return txWrap(database, OUTBOX_STORE, 'readwrite', async (store) => {
-        for (const id of ids) {
-            await promisifyRequest(store.delete(id));
-        }
-    });
-}
-
-
+// ====== Helpers ======
 function txWrap<T>(
     database: IDBDatabase,
     storeName: string,
@@ -150,7 +102,9 @@ function txWrap<T>(
                 tx.commit?.();
             })
             .catch((err) => {
-                try { tx.abort(); } catch { }
+                try {
+                    tx.abort();
+                } catch { }
                 reject(err);
             });
 
@@ -167,25 +121,137 @@ function promisifyRequest<T = any>(req: IDBRequest<T>): Promise<T> {
     });
 }
 
+// ====== Normalización (compat texto viejo) ======
+function normalize(t: any): Task {
+    // si aún hay items antiguos con "text", los traducimos
+    const title =
+        typeof t.title === 'string'
+            ? t.title
+            : typeof t.text === 'string'
+                ? t.text
+                : '';
+    const notes = typeof t.notes === 'string' ? t.notes : '';
+    return {
+        id: t.id,
+        title,
+        notes,
+        completed: !!t.completed,
+        isSynced: !!t.isSynced,
+        createdAt: t.createdAt ?? Date.now(),
+        updatedAt: t.updatedAt ?? Date.now(),
+        remoteId: typeof t.remoteId === 'number' ? t.remoteId : undefined,
+    };
+}
+
+// ====== CRUD ======
+export async function addTask(input: {
+    title: string;
+    notes: string;
+    completed?: boolean;
+}) {
+    const database = await openDB();
+    return txWrap(database, TASKS_STORE, 'readwrite', (store) => {
+        const now = Date.now();
+        const toSave: Task = {
+            title: input.title,
+            notes: input.notes,
+            completed: !!input.completed,
+            isSynced: false,
+            createdAt: now,
+            updatedAt: now,
+        };
+        return promisifyRequest(store.add(toSave as any));
+    });
+}
+
+export async function getAllTasks(): Promise<Task[]> {
+    const database = await openDB();
+    return txWrap(database, TASKS_STORE, 'readonly', async (store) => {
+        const all = (await promisifyRequest(store.getAll())) as (Task | LegacyTask)[];
+        return all.map(normalize);
+    });
+}
+
+export async function updateTask(task: Task) {
+    if (!task.id) throw new Error('updateTask: falta id');
+    const database = await openDB();
+    task.updatedAt = Date.now();
+    task.isSynced = false;
+    return txWrap(database, TASKS_STORE, 'readwrite', (store) =>
+        promisifyRequest(store.put(task as any))
+    );
+}
+
+export async function deleteTask(id: number) {
+    const database = await openDB();
+    return txWrap(database, TASKS_STORE, 'readwrite', (store) =>
+        promisifyRequest(store.delete(id))
+    );
+}
+
+// ====== Outbox ======
+export async function enqueueOutbox(item: Omit<OutboxItem, 'id' | 'createdAt'>) {
+    const database = await openDB();
+    const toSave: OutboxItem = { ...item, createdAt: Date.now() };
+    return txWrap(database, OUTBOX_STORE, 'readwrite', (store) =>
+        promisifyRequest(store.add(toSave as any))
+    );
+}
+
+export async function readOutboxBatch(limit = 20): Promise<OutboxItem[]> {
+    const database = await openDB();
+    return txWrap(database, OUTBOX_STORE, 'readonly', async (store) => {
+        const idx = store.index('by_createdAt');
+        const all = await promisifyRequest<OutboxItem[]>(idx.getAll());
+        return all.slice(0, limit);
+    });
+}
+
+export async function clearOutboxIds(ids: number[]) {
+    const database = await openDB();
+    return txWrap(database, OUTBOX_STORE, 'readwrite', async (store) => {
+        for (const id of ids) {
+            await promisifyRequest(store.delete(id));
+        }
+    });
+}
+
+// ====== Utilidades ====
 export async function __debugOpen() {
     await openDB();
     console.log('[idb] DB abierta y stores creados:', DB_NAME);
 }
 
-export async function queueCreate(text: string) {
-    const id = await addTask({ text });
+// NUEVO: create con { title, notes }
+export async function queueCreate(value: { title: string; notes: string }) {
+    const now = Date.now();
+    const id = (await addTask({
+        title: value.title,
+        notes: value.notes,
+        completed: false,
+    })) as number;
+
     await enqueueOutbox({
         op: 'create',
-        payload: { id: id as number, text, completed: false, isSynced: false, createdAt: Date.now(), updatedAt: Date.now() }
+        payload: {
+            id,
+            title: value.title,
+            notes: value.notes,
+            completed: false,
+            isSynced: false,
+            createdAt: now,
+            updatedAt: now,
+        } as Task,
     });
 }
 
 export async function queueUpdate(task: Task) {
-    await updateTask({ ...task, isSynced: false, updatedAt: Date.now() });
+    const updated: Task = { ...task, isSynced: false, updatedAt: Date.now() };
+    await updateTask(updated);
     await enqueueOutbox({
         op: 'update',
         taskId: task.id,
-        payload: { ...task, isSynced: false, updatedAt: Date.now() },
+        payload: { ...updated },
     });
 }
 
@@ -202,9 +268,9 @@ export async function requestBackgroundSync(tag = 'sync-outbox') {
 
 export async function listUnsyncedTasks(): Promise<Task[]> {
     const database = await openDB();
-    return txWrap(database, 'tasks', 'readonly', async (store) => {
-        const all = await promisifyRequest<Task[]>(store.getAll());
-        return all.filter((t) => t && t.isSynced === false);
+    return txWrap(database, TASKS_STORE, 'readonly', async (store) => {
+        const all = (await promisifyRequest(store.getAll())) as any[];
+        return all.map(normalize).filter((t) => t && t.isSynced === false);
     });
 }
 
@@ -212,12 +278,14 @@ export async function backfillOutboxUnsynced() {
     const database = await openDB();
     const [unsynced, existingOutbox] = await Promise.all([
         listUnsyncedTasks(),
-        txWrap(database, 'outbox', 'readonly', (store) => promisifyRequest<OutboxItem[]>(store.getAll()))
+        txWrap(database, OUTBOX_STORE, 'readonly', (store) =>
+            promisifyRequest<OutboxItem[]>(store.getAll())
+        ),
     ]);
 
     const already = new Set<number>();
     for (const it of existingOutbox) {
-        const id = it.payload?.id ?? it.taskId;
+        const id = (it.payload?.id ?? it.taskId) as number | undefined;
         if (typeof id === 'number') already.add(id);
     }
 
@@ -225,7 +293,7 @@ export async function backfillOutboxUnsynced() {
         if (!t.id || already.has(t.id)) continue;
         await enqueueOutbox({
             op: 'create',
-            payload: { ...t }
+            payload: { ...t }, // ya tiene title/notes normalizados
         });
     }
 }
