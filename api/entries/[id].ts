@@ -1,16 +1,20 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { sql } from '@vercel/postgres';
 
-function cors(res: VercelResponse) {
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'PATCH,DELETE,OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+function cors(req: VercelRequest, res: VercelResponse) {
+    const origin = (req.headers.origin as string) || '*';
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Vary', 'Origin');
+    res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PATCH,DELETE,OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    res.setHeader('Access-Control-Max-Age', '86400');
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-    cors(res);
-    if (req.method === 'OPTIONS') return res.status(204).end();
-
+    cors(req, res);
+    if (req.method === 'OPTIONS') {
+        return res.status(204).end();
+    }
     const idParam = (req.query.id ?? '').toString();
     const id = Number(idParam);
     if (!Number.isFinite(id)) {
