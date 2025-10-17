@@ -1,4 +1,4 @@
-const VERSION = 'v1.0.22';
+const VERSION = 'v1.0.23';
 const STATIC_CACHE = `ast-static-${VERSION}`;
 const RUNTIME_CACHE = `ast-runtime-${VERSION}`;
 const IMAGE_CACHE = `ast-images-${VERSION}`;
@@ -260,29 +260,26 @@ async function swShowNotification(title, options = {}) {
     });
 }
 
-// Listener para "push" real (lo usaremos en el siguiente paso)
 self.addEventListener('push', (event) => {
-    try {
-        const payload = event.data ? event.data.json() : {};
-        const title = payload.title || 'Nueva notificación';
-        const body = payload.body || '';
-        event.waitUntil(swShowNotification(title, { body, data: payload.data || {} }));
-    } catch {
-        event.waitUntil(swShowNotification('Notificación', { body: 'Tienes un mensaje' }));
-    }
+    let data = {};
+    try { data = event.data ? event.data.json() : {}; } catch { }
+
+    const title = data.title || 'Notificación';
+    const options = {
+        body: data.body || 'Contenido',
+        icon: data.icon || '/icons/icon-192.png',
+        data: data.data || {},
+    };
+
+    event.waitUntil(self.registration.showNotification(title, options));
 });
 
-// Al hacer click en la notificación, enfoca/abre la app
 self.addEventListener('notificationclick', (event) => {
     event.notification.close();
-    event.waitUntil((async () => {
-        const allClients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
-        const url = self.location.origin + '/';
-        const client = allClients.find((c) => c.url.startsWith(url));
-        if (client) return client.focus();
-        return self.clients.openWindow('/');
-    })());
+    const url = (event.notification.data && event.notification.data.url) || '/';
+    event.waitUntil(clients.openWindow(url));
 });
+
 
 // Mensaje para probar notificación "local" desde la página
 self.addEventListener('message', (event) => {

@@ -81,3 +81,41 @@ export async function subscribePushAndSave(): Promise<boolean> {
 
     return true;
 }
+
+export async function sendTestPush() {
+    if (!('serviceWorker' in navigator)) {
+        alert('No hay Service Worker disponible.');
+        return false;
+    }
+    const reg = await navigator.serviceWorker.ready;
+
+    let subscription = await reg.pushManager.getSubscription();
+    if (!subscription) {
+        alert('Primero activa notificaciones para crear la suscripción.');
+        return false;
+    }
+
+    // Usa tu dominio de Preview (o relativo si estás desplegado).
+    const API = '/api/push/test-send';
+    const rsp = await fetch(API, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            subscription,
+            payload: {
+                title: 'Push de prueba',
+                body: 'Enviada por el backend (sin guardar en BD).',
+                icon: '/icons/icon-192.png',
+                data: { url: '/' },
+            },
+        }),
+    });
+
+    if (!rsp.ok) {
+        console.error('Error test-send:', await rsp.text());
+        alert('Fallo el envío desde el backend');
+        return false;
+    }
+    alert('¡Push enviada! Revisa la notificación.');
+    return true;
+}

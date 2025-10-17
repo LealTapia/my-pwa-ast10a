@@ -3,7 +3,7 @@ import { useOnlineStatus } from "./hooks/statusOnline";
 import InputsForm from "./components/inputsForm";
 import EntriesList from "./components/entriesList";
 import { backfillOutboxUnsynced, requestBackgroundSync, requestImmediateSyncNow } from "./lib/db";
-import { subscribePushAndSave } from "./lib/push";
+import { subscribePushAndSave, sendTestPush } from "./lib/push";
 
 
 function App() {
@@ -92,7 +92,7 @@ function App() {
         Activar notificaciones
       </button>
 
-      <button onClick={showLocalTestNotification} style={{ padding: '6px 10px', borderRadius: 8 }}>
+      <button onClick={() => sendTestPush()} style={{ marginTop: 8 }}>
         Probar notificación
       </button>
 
