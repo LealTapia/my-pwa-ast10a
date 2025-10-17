@@ -1,7 +1,9 @@
-// api/push/test-send.ts
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import webpush from 'web-push';
 import { sql } from '@vercel/postgres';
+
+// Fuerza runtime Node en Vercel (web-push NO funciona en Edge)
+export const config = { runtime: 'nodejs20.x' };
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (req.method !== 'POST') {
@@ -11,15 +13,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const publicKey = process.env.VAPID_PUBLIC_KEY;
     const privateKey = process.env.VAPID_PRIVATE_KEY;
 
+    // Logs útiles en runtime
+    console.log('[push] env public len:', publicKey?.length ?? 0);
+    console.log('[push] env private len:', privateKey?.length ?? 0);
+
     if (!publicKey || !privateKey) {
         return res.status(500).json({ ok: false, error: 'Missing VAPID keys' });
     }
 
-    // Configurar web-push una vez por request
-    webpush.setVapidDetails('mailto:you@example.com', publicKey, privateKey);
+    try {
+        webpush.setVapidDetails('mailto:you@example.com', publicKey, privateKey);
+    } catch (e: any) {
+        console.error('[push] setVapidDetails error:', e);
+        return res.status(500).json({ ok: false, error: e?.message ?? 'setVapidDetails failed' });
+    }
 
     try {
-        // Toma la suscripción más reciente (ajusta si quieres filtrar por usuario)
         const { rows } = await sql`
       SELECT endpoint, p256dh, auth
       FROM push_subscriptions
@@ -27,25 +36,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       LIMIT 1
     `;
         if (!rows.length) {
-            return res.status(404).json({ ok: false, error: 'No hay suscripciones guardadas' });
+            return res.status(404).json({ ok: false, error: 'No subscriptions' });
         }
 
-        const sub = rows[0];
+        const r = rows[0];
         const subscription = {
-            endpoint: sub.endpoint,
-            keys: { p256dh: sub.p256dh, auth: sub.auth },
+            endpoint: r.endpoint,
+            keys: { p256dh: r.p256dh, auth: r.auth },
         };
 
-        // Mensaje de prueba
         const payload = JSON.stringify({
             title: 'Notificación desde el servidor 🎯',
             body: 'Llegó vía Web Push + VAPID',
         });
 
+        console.log('[push] sending to endpoint prefix:', String(r.endpoint).slice(0, 40));
         await webpush.sendNotification(subscription as any, payload);
+
         return res.json({ ok: true });
     } catch (err: any) {
-        console.error('[push:test-send] error', err);
+        console.error('[push] sendNotification error:', err);
+        // Devuelve el detalle al cliente para verlo en la consola del navegador
         return res.status(500).json({ ok: false, error: err?.message ?? 'send error' });
     }
 }

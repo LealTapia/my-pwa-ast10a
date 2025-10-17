@@ -260,25 +260,46 @@ async function swShowNotification(title, options = {}) {
     });
 }
 
+// --- PUSH desde el servidor ---
 self.addEventListener('push', (event) => {
-    let data = {};
-    try { data = event.data ? event.data.json() : {}; } catch { }
+    // intentamos parsear JSON que envía el backend
+    const data = (() => {
+        try { return event.data ? event.data.json() : {}; } catch {
+            try { return { body: event.data.text() }; } catch { return {}; }
+        }
+    })();
 
-    const title = data.title || 'Notificación';
-    const options = {
-        body: data.body || 'Contenido',
-        icon: data.icon || '/icons/icon-192.png',
-        data: data.data || {},
+    const title = data.title || 'Nueva notificación';
+    const body = data.body || 'Tienes un nuevo aviso';
+    const icon = data.icon || '/icons/icon-192.png';
+    const tag = data.tag || 'pwa-ast';
+
+    const opts = {
+        body,
+        icon,
+        badge: '/icons/icon-192.png',
+        tag,
+        data: data.url ? { url: data.url } : {},
+        // vibrate: [200,100,200],
     };
 
-    event.waitUntil(self.registration.showNotification(title, options));
+    event.waitUntil(self.registration.showNotification(title, opts));
 });
 
+// Abrir / enfocar al hacer clic en la notificación
 self.addEventListener('notificationclick', (event) => {
     event.notification.close();
-    const url = (event.notification.data && event.notification.data.url) || '/';
-    event.waitUntil(clients.openWindow(url));
+    const urlToOpen = (event.notification.data && event.notification.data.url) || '/';
+    event.waitUntil(
+        (async () => {
+            const all = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+            const client = all.find(c => 'focus' in c && new URL(c.url).pathname === new URL(urlToOpen, self.location.origin).pathname);
+            if (client) return client.focus();
+            return self.clients.openWindow(urlToOpen);
+        })()
+    );
 });
+
 
 
 // Mensaje para probar notificación "local" desde la página
