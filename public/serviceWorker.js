@@ -1,4 +1,4 @@
-const VERSION = 'v1.0.23';
+const VERSION = 'v1.0.27';
 const STATIC_CACHE = `ast-static-${VERSION}`;
 const RUNTIME_CACHE = `ast-runtime-${VERSION}`;
 const IMAGE_CACHE = `ast-images-${VERSION}`;
@@ -188,51 +188,50 @@ async function swSetTaskRemoteSynced(localId, remoteId) {
     });
 }
 
+// === Local-only sync (sin servidor): marca como sincronizado y limpia la outbox ===
 async function processOutbox() {
     const items = await swReadOutbox(50);
     if (!items.length) return;
 
     const toClear = [];
+    const idsToMark = [];
 
     for (const it of items) {
-        switch (it.op) {
-            case 'create': {
-                const p = it.payload || {};
-                try {
-                    const resp = await fetch(`${API_BASE}/api/entries`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'text/plain' },
-                        body: JSON.stringify({
-                            title: p.title ?? p.text ?? '',
-                            notes: p.notes ?? '',
-                            completed: !!p.completed,
-                            created_at: p.createdAt,
-                            updated_at: p.updatedAt,
-                        }),
-                    });
-                    if (!resp.ok) throw new Error(`POST /api/entries ${resp.status}`);
-                    const json = await resp.json();
-                    const remoteId = json?.data?.id;
-                    if (typeof remoteId === 'number' && typeof p.id === 'number') {
-                        await swSetTaskRemoteSynced(p.id, remoteId);
-                        toClear.push(it.id);
-                    }
-                } catch (err) {
-                    console.warn('[sync:create] fallo, reintenta luego', err);
-                }
-                break;
+        try {
+            if (it.op === 'create' && it.payload?.id != null) {
+                // Asignamos un remoteId ficticio y marcamos como sincronizada
+                const localId = it.payload.id;
+                const fakeRemoteId = Date.now(); // cualquier número único
+                await swSetTaskRemoteSynced(localId, fakeRemoteId);
+                toClear.push(it.id);
+            } else if (it.op === 'update' && it.payload?.id != null) {
+                // Para updates, basta con marcar la tarea como sincronizada
+                idsToMark.push(it.payload.id);
+                toClear.push(it.id);
+            } else if (it.op === 'delete') {
+                // Para deletes locales, simplemente limpiamos la outbox
+                toClear.push(it.id);
+            } else {
+                // Desconocido: lo dejamos para reintentar
+                console.warn('[sync] op desconocida, no se limpia:', it);
             }
-
-            default:
-                break;
+        } catch (err) {
+            console.warn('[sync] error procesando item', it, err);
+            // No limpiamos el ítem para que se reintente después
         }
     }
 
+    // Marca en lote las tareas como sincronizadas (para updates)
+    if (idsToMark.length) await swMarkTasksSynced(idsToMark);
+
+    // Limpia la outbox de lo que “sincronizamos”
     if (toClear.length) await swClearOutboxIds(toClear);
 
+    // Notifica a las páginas para refrescar la lista
     const clientsList = await self.clients.matchAll();
     for (const c of clientsList) c.postMessage({ type: 'SYNC_DONE' });
 }
+
 
 self.addEventListener('sync', (event) => {
     if (event.tag === 'sync-outbox') {
@@ -309,3 +308,70 @@ self.addEventListener('message', (event) => {
         event.waitUntil(swShowNotification(title || 'Prueba de notificación', options || { body: 'Desde SW' }));
     }
 });
+
+// Marca una tarea local como sincronizada y (opcionalmente) guarda un remoteId ficticio
+async function markLocalSynced(localId, remoteId /* opcional */) {
+    const db = await swOpenDB();
+    const { tx, store } = swTx(db, 'tasks', 'readwrite');
+
+    await new Promise((res, rej) => {
+        const getReq = store.get(localId);
+        getReq.onsuccess = () => {
+            const t = getReq.result;
+            if (!t) return res(); // si ya no existe, no hacemos nada
+            t.isSynced = true;
+            t.updatedAt = Date.now();
+            if (remoteId != null) t.remoteId = remoteId;
+            const putReq = store.put(t);
+            putReq.onsuccess = () => res();
+            putReq.onerror = () => rej(putReq.error);
+        };
+        getReq.onerror = () => rej(getReq.error);
+    });
+
+    await new Promise((res, rej) => {
+        tx.oncomplete = () => res();
+        tx.onerror = () => rej(tx.error);
+        tx.onabort = () => rej(tx.error || new Error('abort'));
+    });
+}
+
+// === Local-only sync (sin servidor): marca como sincronizado y limpia la outbox ===
+async function processOutbox() {
+    const items = await swReadOutbox(50);
+    if (!items.length) return;
+
+    const toClear = [];
+
+    for (const it of items) {
+        try {
+            if (it.op === 'create' && it.payload?.id != null) {
+                // Creamos un remoteId ficticio y marcamos como sincronizada
+                const localId = it.payload.id;
+                const fakeRemoteId = Date.now();
+                await markLocalSynced(localId, fakeRemoteId);
+                toClear.push(it.id);
+            } else if (it.op === 'update' && (it.payload?.id != null || it.taskId != null)) {
+                // Para updates, basta con marcar la tarea como sincronizada
+                const localId = it.payload?.id ?? it.taskId;
+                await markLocalSynced(localId);
+                toClear.push(it.id);
+            } else if (it.op === 'delete') {
+                // Delete local ya fue aplicado; limpiamos de la outbox
+                toClear.push(it.id);
+            } else {
+                // Caso desconocido: lo dejamos para reintentar
+                console.warn('[sync] op desconocida, no se limpia:', it);
+            }
+        } catch (err) {
+            console.warn('[sync] error procesando item', it, err);
+            // No limpiamos ese item para reintentar después
+        }
+    }
+
+    if (toClear.length) await swClearOutboxIds(toClear);
+
+    // Notifica a la página para refrescar UI
+    const clientsList = await self.clients.matchAll();
+    for (const c of clientsList) c.postMessage({ type: 'SYNC_DONE' });
+}

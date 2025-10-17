@@ -90,7 +90,7 @@ const styles: Record<string, React.CSSProperties> = {
     padding: "24px 16px",
     fontFamily:
       'ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Inter, Arial',
-    background: "#f7f7fb",
+    background: "none",
   },
   header: { display: "flex", alignItems: "center", gap: 12 },
   badge: {
