@@ -1,10 +1,9 @@
-const VERSION = 'v1.0.20';
+const VERSION = 'v1.1.0';
 const STATIC_CACHE = `ast-static-${VERSION}`;
 const RUNTIME_CACHE = `ast-runtime-${VERSION}`;
 const IMAGE_CACHE = `ast-images-${VERSION}`;
 const OFFLINE_URL = '/offline.html';
 
-// Usa tu preview actual (luego lo pasamos a variable)
 const API_BASE = self.location.origin;
 
 const APP_SHELL = [
@@ -16,7 +15,6 @@ const APP_SHELL = [
     '/favicon.ico',
 ];
 
-// -------- Install / Activate --------
 self.addEventListener('install', (event) => {
     event.waitUntil(caches.open(STATIC_CACHE).then((cache) => cache.addAll(APP_SHELL)));
     self.skipWaiting();
@@ -36,7 +34,6 @@ self.addEventListener('activate', (event) => {
     );
 });
 
-// -------- Fetch strategies --------
 async function trimCache(cacheName, maxEntries) {
     const cache = await caches.open(cacheName);
     const keys = await cache.keys();
@@ -48,7 +45,6 @@ self.addEventListener('fetch', (event) => {
     const req = event.request;
     const url = new URL(req.url);
 
-    // Navegación: Network-first con fallback a offline.html
     if (req.mode === 'navigate') {
         event.respondWith(
             (async () => {
@@ -64,7 +60,6 @@ self.addEventListener('fetch', (event) => {
         return;
     }
 
-    // JS/CSS: Stale-while-revalidate
     if (url.origin === self.location.origin && /\.(?:js|css)$/.test(url.pathname)) {
         event.respondWith(
             (async () => {
@@ -82,7 +77,6 @@ self.addEventListener('fetch', (event) => {
         return;
     }
 
-    // Imágenes: Cache-first con backfill
     if (url.origin === self.location.origin && /\.(?:png|jpg|jpeg|gif|svg|webp|ico)$/.test(url.pathname)) {
         event.respondWith(
             (async () => {
@@ -102,7 +96,6 @@ self.addEventListener('fetch', (event) => {
         return;
     }
 
-    // Otros GET del mismo origen: SWR
     if (req.method === 'GET' && url.origin === self.location.origin) {
         event.respondWith(
             (async () => {
@@ -120,7 +113,6 @@ self.addEventListener('fetch', (event) => {
     }
 });
 
-// -------- IndexedDB (desde SW) --------
 const DB_NAME = 'my-pwa-ast-db';
 const TASKS_STORE = 'tasks';
 const OUTBOX_STORE = 'outbox';
@@ -196,7 +188,6 @@ async function swSetTaskRemoteSynced(localId, remoteId) {
     });
 }
 
-// -------- Proceso de outbox (solo marca synced cuando el server responde) --------
 async function processOutbox() {
     const items = await swReadOutbox(50);
     if (!items.length) return;
@@ -232,7 +223,6 @@ async function processOutbox() {
                 break;
             }
 
-            // TODO: conectar 'update' y 'delete' al backend (PATCH / DELETE)
             default:
                 break;
         }
@@ -244,7 +234,6 @@ async function processOutbox() {
     for (const c of clientsList) c.postMessage({ type: 'SYNC_DONE' });
 }
 
-// === ÚNICO listener de sync ===
 self.addEventListener('sync', (event) => {
     if (event.tag === 'sync-outbox') {
         event.waitUntil(processOutbox());

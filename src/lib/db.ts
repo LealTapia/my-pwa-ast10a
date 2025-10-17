@@ -1,9 +1,5 @@
-// src/lib/db.ts
-
-// ====== Tipos ======
 export interface Task {
     id?: number;
-    // Nuevo modelo con titulo + descripcion
     title: string;
     notes: string;
     completed: boolean;
@@ -13,7 +9,6 @@ export interface Task {
     remoteId?: number;
 }
 
-// Compat: por si quedan registros viejos que tenían "text"
 type LegacyTask = {
     id?: number;
     text?: string;
@@ -34,7 +29,6 @@ export interface OutboxItem {
     createdAt: number;
 }
 
-// ====== IDB config ======
 const DB_NAME = 'my-pwa-ast-db';
 const DB_VERSION = 1;
 
@@ -82,7 +76,6 @@ export const openDB = (): Promise<IDBDatabase> =>
         };
     });
 
-// ====== Helpers ======
 function txWrap<T>(
     database: IDBDatabase,
     storeName: string,
@@ -121,9 +114,7 @@ function promisifyRequest<T = any>(req: IDBRequest<T>): Promise<T> {
     });
 }
 
-// ====== Normalización (compat texto viejo) ======
 function normalize(t: any): Task {
-    // si aún hay items antiguos con "text", los traducimos
     const title =
         typeof t.title === 'string'
             ? t.title
@@ -143,7 +134,6 @@ function normalize(t: any): Task {
     };
 }
 
-// ====== CRUD ======
 export async function addTask(input: {
     title: string;
     notes: string;
@@ -189,7 +179,6 @@ export async function deleteTask(id: number) {
     );
 }
 
-// ====== Outbox ======
 export async function enqueueOutbox(item: Omit<OutboxItem, 'id' | 'createdAt'>) {
     const database = await openDB();
     const toSave: OutboxItem = { ...item, createdAt: Date.now() };
@@ -216,13 +205,11 @@ export async function clearOutboxIds(ids: number[]) {
     });
 }
 
-// ====== Utilidades ====
 export async function __debugOpen() {
     await openDB();
     console.log('[idb] DB abierta y stores creados:', DB_NAME);
 }
 
-// NUEVO: create con { title, notes }
 export async function queueCreate(value: { title: string; notes: string }) {
     const now = Date.now();
     const id = (await addTask({
@@ -293,7 +280,7 @@ export async function backfillOutboxUnsynced() {
         if (!t.id || already.has(t.id)) continue;
         await enqueueOutbox({
             op: 'create',
-            payload: { ...t }, // ya tiene title/notes normalizados
+            payload: { ...t }, 
         });
     }
 }

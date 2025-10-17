@@ -7,18 +7,18 @@ function cors(req: VercelRequest, res: VercelResponse) {
     res.setHeader('Vary', 'Origin');
     res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-    res.setHeader('Access-Control-Max-Age', '86400'); // cachea el preflight
+    res.setHeader('Access-Control-Max-Age', '86400');
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
     cors(req, res);
     if (req.method === 'OPTIONS') {
-        return res.status(204).end(); // <- responder preflight
+        return res.status(204).end();
     }
 
     try {
         if (req.method === 'GET') {
-            const { rows } = await sql/*sql*/`
+            const { rows } = await sql`
         SELECT id, title, notes, completed, created_at, updated_at, inserted_at
         FROM entries
         ORDER BY updated_at DESC

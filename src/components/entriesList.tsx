@@ -20,7 +20,6 @@ export default function EntriesList({ refreshKey }: Props) {
             setLoading(true);
             const data = await getAllTasks();
             if (mounted) {
-                // 1º pendientes arriba, 2º completadas abajo; dentro de cada grupo, lo más reciente primero
                 data.sort((a, b) => (Number(a.completed) - Number(b.completed)) || b.updatedAt - a.updatedAt);
                 setTasks(data);
                 setLoading(false);
