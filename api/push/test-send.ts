@@ -1,41 +1,51 @@
+// api/push/test-send.ts
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import webpush from 'web-push';
-
-const VAPID_PUBLIC = process.env.VITE_VAPID_PUBLIC_KEY!;
-const VAPID_PRIVATE = process.env.VAPID_PRIVATE_KEY!;
-const VAPID_SUBJECT = process.env.VAPID_SUBJECT || 'mailto:leal_agareoz@hotmail.com';
-
-function allowCORS(res: VercelResponse) {
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-}
+import { sql } from '@vercel/postgres';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-    allowCORS(res);
-    if (req.method === 'OPTIONS') return res.status(204).end();
-    if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'Method not allowed' });
+    if (req.method !== 'POST') {
+        return res.status(405).json({ ok: false, error: 'Method not allowed' });
+    }
+
+    const publicKey = process.env.VAPID_PUBLIC_KEY;
+    const privateKey = process.env.VAPID_PRIVATE_KEY;
+
+    if (!publicKey || !privateKey) {
+        return res.status(500).json({ ok: false, error: 'Missing VAPID keys' });
+    }
+
+    // Configurar web-push una vez por request
+    webpush.setVapidDetails('mailto:you@example.com', publicKey, privateKey);
 
     try {
-        const { subscription, payload } = req.body || {};
-        if (!subscription) return res.status(400).json({ ok: false, error: 'Missing subscription' });
+        // Toma la suscripción más reciente (ajusta si quieres filtrar por usuario)
+        const { rows } = await sql`
+      SELECT endpoint, p256dh, auth
+      FROM push_subscriptions
+      ORDER BY created_at DESC
+      LIMIT 1
+    `;
+        if (!rows.length) {
+            return res.status(404).json({ ok: false, error: 'No hay suscripciones guardadas' });
+        }
 
-        webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC, VAPID_PRIVATE);
+        const sub = rows[0];
+        const subscription = {
+            endpoint: sub.endpoint,
+            keys: { p256dh: sub.p256dh, auth: sub.auth },
+        };
 
-        await webpush.sendNotification(
-            subscription,
-            JSON.stringify(
-                payload ?? {
-                    title: '¡Hola desde el backend!',
-                    body: 'Notificación push real (sin BD).',
-                    icon: '/icons/icon-192.png',
-                    data: { url: '/' },
-                },
-            )
-        );
+        // Mensaje de prueba
+        const payload = JSON.stringify({
+            title: 'Notificación desde el servidor 🎯',
+            body: 'Llegó vía Web Push + VAPID',
+        });
 
+        await webpush.sendNotification(subscription as any, payload);
         return res.json({ ok: true });
     } catch (err: any) {
-        return res.status(500).json({ ok: false, error: err?.message || 'send fail' });
+        console.error('[push:test-send] error', err);
+        return res.status(500).json({ ok: false, error: err?.message ?? 'send error' });
     }
 }
