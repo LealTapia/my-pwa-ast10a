@@ -33,13 +33,29 @@ export async function subscribePushAndSave(): Promise<boolean> {
     }
     const reg = await navigator.serviceWorker.ready;
 
-    // 3) VAPID key pública desde env
-    const publicKey = import.meta.env.VITE_VAPID_PUBLIC_KEY as string | undefined;
+    // 3) VAPID key pública desde env (limpia espacios/saltos de línea)
+    const rawEnvKey = (import.meta.env.VITE_VAPID_PUBLIC_KEY ?? '') as string;
+
+    // Elimina espacios y saltos de línea que Vercel a veces deja al copiar/pegar
+    const publicKey = rawEnvKey.trim().replace(/\s+/g, '');
+
+    // Debug para verificar que realmente llegó
+    console.log('[push] VAPID public key len:', publicKey.length);
+    console.log('[push] VAPID public key chars OK:', /^[A-Za-z0-9_-]+$/.test(publicKey));
+
+    // Validación
     if (!publicKey) {
         alert('VITE_VAPID_PUBLIC_KEY no está configurada.');
         return false;
     }
+    if (!/^[A-Za-z0-9_-]+$/.test(publicKey)) {
+        alert('VAPID pública contiene caracteres inválidos (revisa espacios/saltos de línea).');
+        return false;
+    }
+
+    // Conversión obligatoria a Uint8Array
     const appServerKey = urlBase64ToUint8Array(publicKey);
+
 
     // 4) ya existe suscripción?
     let subscription = await reg.pushManager.getSubscription();
