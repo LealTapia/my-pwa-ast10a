@@ -2,8 +2,9 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import webpush from 'web-push';
 import { sql } from '@vercel/postgres';
 
-// Fuerza runtime Node en Vercel (web-push NO funciona en Edge)
-export const config = { runtime: 'nodejs20.x' };
+export const config = {
+    runtime: 'nodejs' as const,
+};
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (req.method !== 'POST') {
