@@ -5,7 +5,6 @@ import EntriesList from "./components/entriesList";
 import { backfillOutboxUnsynced, requestBackgroundSync, requestImmediateSyncNow } from "./lib/db";
 import { subscribePushAndSave, sendTestPush } from "./lib/push";
 
-
 function App() {
   const online = useOnlineStatus();
   const [refreshKey, setRefreshKey] = useState(0);
@@ -13,9 +12,7 @@ function App() {
   useEffect(() => {
     if (navigator.serviceWorker) {
       const onMsg = (event: MessageEvent) => {
-        if (event.data?.type === 'SYNC_DONE') {
-          setRefreshKey((k) => k + 1);
-        }
+        if (event.data?.type === 'SYNC_DONE') setRefreshKey(k => k + 1);
       };
       navigator.serviceWorker.addEventListener('message', onMsg);
       return () => navigator.serviceWorker.removeEventListener('message', onMsg);
@@ -31,10 +28,7 @@ function App() {
   }, []);
 
   async function ensureNotificationPermission(): Promise<boolean> {
-    if (!('Notification' in window)) {
-      alert('Este navegador no soporta notificaciones.');
-      return false;
-    }
+    if (!('Notification' in window)) { alert('Este navegador no soporta notificaciones.'); return false; }
     if (Notification.permission === 'granted') return true;
     if (Notification.permission === 'denied') {
       alert('Has denegado las notificaciones. Habilítalas en los ajustes del navegador.');
@@ -44,17 +38,17 @@ function App() {
     return res === 'granted';
   }
 
+  // ✅ Esta función ahora sí se usa
   async function showLocalTestNotification() {
     const ok = await ensureNotificationPermission();
     if (!ok) return;
     const reg = await navigator.serviceWorker?.ready;
     reg?.active?.postMessage({
       type: 'SHOW_LOCAL_NOTIFICATION',
-      title: '¡Notificación de prueba!',
-      options: { body: 'Mostrada por el Service Worker' },
+      title: '¡Notificación local!',
+      options: { body: 'Mostrada por el Service Worker (sin backend).' },
     });
   }
-
 
   return (
     <main style={styles.main}>
@@ -62,26 +56,20 @@ function App() {
         <h1>My PWA - AST</h1>
         <span
           title={online ? "Conectado" : "Sin conexión"}
-          style={{
-            ...styles.badge,
-            background: online ? "#2e7d32" : "#b00020",
-          }}
+          style={{ ...styles.badge, background: online ? "#2e7d32" : "#b00020" }}
         >
           {online ? "ONLINE" : "OFFLINE"}
         </span>
       </header>
 
-
-
       <section style={styles.card}>
         <h2 style={{ marginTop: 0 }}>Formulario offline (IndexedDB)</h2>
-        <p style={{ marginTop: 0 }}>
-          Este formulario guarda directamente en IndexedDB, aun sin conexión.
-        </p>
-        <InputsForm onSaved={() => setRefreshKey((k) => k + 1)} />
+        <p style={{ marginTop: 0 }}>Este formulario guarda directamente en IndexedDB, aun sin conexión.</p>
+        <InputsForm onSaved={() => setRefreshKey(k => k + 1)} />
         <EntriesList refreshKey={refreshKey} />
       </section>
 
+      {/* Botón para suscribirse a Push y guardar en backend */}
       <button
         onClick={async () => {
           const ok = await subscribePushAndSave();
@@ -92,10 +80,15 @@ function App() {
         Activar notificaciones
       </button>
 
-      <button onClick={() => sendTestPush()} style={{ marginTop: 8 }}>
-        Probar notificación
+      {/* Local (sin backend) */}
+      <button onClick={showLocalTestNotification} style={{ marginTop: 8, padding: "6px 10px", borderRadius: 8 }}>
+        Probar notificación local (SW)
       </button>
 
+      {/* Push real (vía backend) */}
+      <button onClick={() => sendTestPush()} style={{ marginTop: 8, padding: "6px 10px", borderRadius: 8 }}>
+        Probar notificación push (server)
+      </button>
     </main>
   );
 }
@@ -109,28 +102,15 @@ const styles: Record<string, React.CSSProperties> = {
     justifyContent: "center",
     gap: 16,
     padding: "24px 16px",
-    fontFamily:
-      'ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Inter, Arial',
-    background: "none ",
+    fontFamily: 'ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Inter, Arial',
+    background: "none",
   },
   header: { display: "flex", alignItems: "center", gap: 12 },
-  badge: {
-    color: "#fff",
-    padding: "6px 10px",
-    borderRadius: 999,
-    fontSize: 12,
-    fontWeight: 700,
-  },
+  badge: { color: "#fff", padding: "6px 10px", borderRadius: 999, fontSize: 12, fontWeight: 700 },
   card: {
-    width: "100%",
-    maxWidth: 720,
-    background: "#fafafa",
-    border: "1px solid #ececec",
-    borderRadius: 12,
-    padding: 16,
-    boxShadow: "0 4px 14px rgba(0,0,0,.06)",
+    width: "100%", maxWidth: 720, background: "#fafafa", border: "1px solid #ececec",
+    borderRadius: 12, padding: 16, boxShadow: "0 4px 14px rgba(0,0,0,.06)",
   },
 };
-
 
 export default App;
