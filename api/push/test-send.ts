@@ -3,7 +3,7 @@ import webpush from 'web-push';
 
 const VAPID_PUBLIC = process.env.VITE_VAPID_PUBLIC_KEY!;
 const VAPID_PRIVATE = process.env.VAPID_PRIVATE_KEY!;
-const VAPID_SUBJECT = process.env.VAPID_SUBJECT || 'mailto:you@example.com';
+const VAPID_SUBJECT = process.env.VAPID_SUBJECT || 'mailto:leal_agareoz@hotmail.com';
 
 function allowCORS(res: VercelResponse) {
     res.setHeader('Access-Control-Allow-Origin', '*');
