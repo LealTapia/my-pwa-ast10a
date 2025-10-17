@@ -1,4 +1,4 @@
-const VERSION = 'v1.1.0';
+const VERSION = 'v1.0.22';
 const STATIC_CACHE = `ast-static-${VERSION}`;
 const RUNTIME_CACHE = `ast-runtime-${VERSION}`;
 const IMAGE_CACHE = `ast-images-${VERSION}`;
@@ -244,5 +244,50 @@ self.addEventListener('message', (event) => {
     if (event.data?.type === 'RUN_SYNC_NOW') {
         event.waitUntil?.(processOutbox());
         processOutbox();
+    }
+});
+
+// --- Utilidad para mostrar notificaciones desde el SW ---
+async function swShowNotification(title, options = {}) {
+    if (Notification.permission !== 'granted') return; // si no hay permiso, no hace nada
+    return self.registration.showNotification(title, {
+        body: options.body || '',
+        icon: '/icons/icon-192.png',
+        badge: '/icons/icon-192.png',
+        tag: options.tag || 'my-pwa-ast',
+        data: options.data || {},
+        ...options,
+    });
+}
+
+// Listener para "push" real (lo usaremos en el siguiente paso)
+self.addEventListener('push', (event) => {
+    try {
+        const payload = event.data ? event.data.json() : {};
+        const title = payload.title || 'Nueva notificación';
+        const body = payload.body || '';
+        event.waitUntil(swShowNotification(title, { body, data: payload.data || {} }));
+    } catch {
+        event.waitUntil(swShowNotification('Notificación', { body: 'Tienes un mensaje' }));
+    }
+});
+
+// Al hacer click en la notificación, enfoca/abre la app
+self.addEventListener('notificationclick', (event) => {
+    event.notification.close();
+    event.waitUntil((async () => {
+        const allClients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+        const url = self.location.origin + '/';
+        const client = allClients.find((c) => c.url.startsWith(url));
+        if (client) return client.focus();
+        return self.clients.openWindow('/');
+    })());
+});
+
+// Mensaje para probar notificación "local" desde la página
+self.addEventListener('message', (event) => {
+    if (event.data?.type === 'SHOW_LOCAL_NOTIFICATION') {
+        const { title, options } = event.data;
+        event.waitUntil(swShowNotification(title || 'Prueba de notificación', options || { body: 'Desde SW' }));
     }
 });

@@ -3,6 +3,8 @@ import { useOnlineStatus } from "./hooks/statusOnline";
 import InputsForm from "./components/inputsForm";
 import EntriesList from "./components/entriesList";
 import { backfillOutboxUnsynced, requestBackgroundSync, requestImmediateSyncNow } from "./lib/db";
+import { subscribePushAndSave } from "./lib/push";
+
 
 function App() {
   const online = useOnlineStatus();
@@ -28,6 +30,32 @@ function App() {
     })();
   }, []);
 
+  async function ensureNotificationPermission(): Promise<boolean> {
+    if (!('Notification' in window)) {
+      alert('Este navegador no soporta notificaciones.');
+      return false;
+    }
+    if (Notification.permission === 'granted') return true;
+    if (Notification.permission === 'denied') {
+      alert('Has denegado las notificaciones. Habilítalas en los ajustes del navegador.');
+      return false;
+    }
+    const res = await Notification.requestPermission();
+    return res === 'granted';
+  }
+
+  async function showLocalTestNotification() {
+    const ok = await ensureNotificationPermission();
+    if (!ok) return;
+    const reg = await navigator.serviceWorker?.ready;
+    reg?.active?.postMessage({
+      type: 'SHOW_LOCAL_NOTIFICATION',
+      title: '¡Notificación de prueba!',
+      options: { body: 'Mostrada por el Service Worker' },
+    });
+  }
+
+
   return (
     <main style={styles.main}>
       <header style={styles.header}>
@@ -43,6 +71,8 @@ function App() {
         </span>
       </header>
 
+
+
       <section style={styles.card}>
         <h2 style={{ marginTop: 0 }}>Formulario offline (IndexedDB)</h2>
         <p style={{ marginTop: 0 }}>
@@ -51,6 +81,21 @@ function App() {
         <InputsForm onSaved={() => setRefreshKey((k) => k + 1)} />
         <EntriesList refreshKey={refreshKey} />
       </section>
+
+      <button
+        onClick={async () => {
+          const ok = await subscribePushAndSave();
+          if (ok) alert("¡Suscripción guardada!");
+        }}
+        style={{ padding: "6px 10px", borderRadius: 8 }}
+      >
+        Activar notificaciones
+      </button>
+
+      <button onClick={showLocalTestNotification} style={{ padding: '6px 10px', borderRadius: 8 }}>
+        Probar notificación
+      </button>
+
     </main>
   );
 }
