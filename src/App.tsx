@@ -2,7 +2,11 @@ import { useState, useEffect } from "react";
 import { useOnlineStatus } from "./hooks/statusOnline";
 import InputsForm from "./components/inputsForm";
 import EntriesList from "./components/entriesList";
-import { backfillOutboxUnsynced, requestBackgroundSync, requestImmediateSyncNow } from "./lib/db";
+import {
+  backfillOutboxUnsynced,
+  requestBackgroundSync,
+  requestImmediateSyncNow,
+} from "./lib/db";
 import { subscribePushAndSave, sendTestPush } from "./lib/push";
 
 function App() {
@@ -15,7 +19,8 @@ function App() {
         if (event.data?.type === "SYNC_DONE") setRefreshKey((k) => k + 1);
       };
       navigator.serviceWorker.addEventListener("message", onMsg);
-      return () => navigator.serviceWorker.removeEventListener("message", onMsg);
+      return () =>
+        navigator.serviceWorker.removeEventListener("message", onMsg);
     }
   }, []);
 
@@ -26,32 +31,6 @@ function App() {
       await requestImmediateSyncNow();
     })();
   }, []);
-
-  async function ensureNotificationPermission(): Promise<boolean> {
-    if (!("Notification" in window)) {
-      alert("Tu navegador no soporta avisos (notificaciones).");
-      return false;
-    }
-    if (Notification.permission === "granted") return true;
-    if (Notification.permission === "denied") {
-      alert("Tienes los avisos desactivados. Actívalos en la configuración del navegador.");
-      return false;
-    }
-    const res = await Notification.requestPermission();
-    return res === "granted";
-  }
-
-  // (Se mantiene, pero el botón queda comentado más abajo)
-  async function showLocalTestNotification() {
-    const ok = await ensureNotificationPermission();
-    if (!ok) return;
-    const reg = await navigator.serviceWorker?.ready;
-    reg?.active?.postMessage({
-      type: "SHOW_LOCAL_NOTIFICATION",
-      title: "¡Notificación local!",
-      options: { body: "Mostrada por el Service Worker (sin backend)." },
-    });
-  }
 
   return (
     <main style={styles.main}>
@@ -68,8 +47,8 @@ function App() {
       <section style={styles.card}>
         <h2 style={{ marginTop: 0 }}>Tu mensaje</h2>
         <p style={{ marginTop: 0 }}>
-          Este buzón funciona incluso sin internet: guardamos tu mensaje y lo sincronizamos automáticamente cuando
-          vuelvas a estar en línea.
+          Este buzón funciona incluso sin internet: guardamos tu mensaje y lo
+          sincronizamos automáticamente cuando vuelvas a estar en línea.
         </p>
         <InputsForm onSaved={() => setRefreshKey((k) => k + 1)} />
         <EntriesList refreshKey={refreshKey} />
@@ -91,6 +70,7 @@ function App() {
         </button>
 
         {/*
+        // Botón para la notificación local (sin backend). Lo dejamos comentado.
         <button onClick={showLocalTestNotification} style={styles.actionBtn}>
           Probar notificación local (SW)
         </button>
@@ -113,7 +93,13 @@ const styles: Record<string, React.CSSProperties> = {
     background: "#f7f7fb",
   },
   header: { display: "flex", alignItems: "center", gap: 12 },
-  badge: { color: "#fff", padding: "6px 10px", borderRadius: 999, fontSize: 12, fontWeight: 700 },
+  badge: {
+    color: "#fff",
+    padding: "6px 10px",
+    borderRadius: 999,
+    fontSize: 12,
+    fontWeight: 700,
+  },
   card: {
     width: "100%",
     maxWidth: 720,
@@ -143,7 +129,7 @@ const styles: Record<string, React.CSSProperties> = {
 
 // Pequeño truco para dos columnas sin CSS externo:
 (function makeTwoColsOnWide() {
-  const mq = window.matchMedia?.("(min-width: 520px)");
+  const mq = typeof window !== "undefined" && window.matchMedia?.("(min-width: 520px)");
   if (!mq) return;
   const apply = () => {
     (styles.actionsGrid as any).gridTemplateColumns = mq.matches ? "1fr 1fr" : "1fr";
